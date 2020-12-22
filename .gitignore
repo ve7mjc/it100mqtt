@@ -1,0 +1,11 @@
+*.o
+moc_*
+settings.cfg
+*.pro.user
+Makefile
+it100
+build/*
+.qmake.stash
+it100mqtt
+*.autosave
+*.log

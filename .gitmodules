@@ -1,0 +1,6 @@
+[submodule "src/qmqtt"]
+	path = src/qmqtt
+	url = https://github.com/emqtt/qmqtt.git
+        branch = v0.1
+
+
