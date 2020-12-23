@@ -14,7 +14,7 @@
 
 #include "it100message.h"
 
-static const quint8 it100CommunicationsTimeoutTime = 10;
+static const quint8 it100CommunicationsTimeoutTime = 30; // >= 5
 static const quint8 it100TcpConnecionRetryTimeSeconds = 5;
 
 enum InterfaceType {

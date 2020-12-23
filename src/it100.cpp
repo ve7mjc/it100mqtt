@@ -25,15 +25,10 @@ IT100::IT100(InterfaceType interfaceType, bool debugMode)
     connect(this->socket, SIGNAL(stateChanged(QAbstractSocket::SocketState)),
             this, SLOT(onTcpSocketStateChanged(QAbstractSocket::SocketState)));
 
-    // QTimer Poll Timer
-    this->pollTimer = new QTimer(this);
-    connect(this->pollTimer, SIGNAL(timeout()), 
-        this, SLOT(onPollTimerTimeout()));
-
     // Module Reconnect Timer
     moduleReconnectTimer = new QTimer();
 
-    // QTimer Alarm Clock Discipliner
+    // Panel Clock Discipline Timer
     // Keep DSC alarm panel in sync with system time
     timedisciplineTimer = new QTimer(this);
     connect(timedisciplineTimer, SIGNAL(timeout()), 
@@ -41,8 +36,15 @@ IT100::IT100(InterfaceType interfaceType, bool debugMode)
 
     // Communications Timeout Timer
     communicationsTimeoutTimer = new QTimer(this);
+    communicationsTimeoutTimer->setInterval(it100CommunicationsTimeoutTime * 1000);
     connect(communicationsTimeoutTimer, SIGNAL(timeout()), 
         this, SLOT(onCommunicationsTimeoutTimerTimeout()));
+        
+    // QTimer Poll Timer
+    this->pollTimer = new QTimer(this);
+    this->pollTimer->setInterval((it100CommunicationsTimeoutTime-1) * 1000);
+    connect(this->pollTimer, SIGNAL(timeout()), 
+        this, SLOT(onPollTimerTimeout()));
 
 }
 
@@ -124,20 +126,12 @@ void IT100::open()
 void IT100::onConnected()
 {
 
-    // Start Poll QTimer if timeout is greater than 1
-    if (it100CommunicationsTimeoutTime > 1)
-        pollTimer->start((it100CommunicationsTimeoutTime-1) * 1000);
-    else if (it100CommunicationsTimeoutTime == 1)
-        pollTimer->start(500);
-
-    if (it100CommunicationsTimeoutTime > 0) {
-        onPollTimerTimeout();
-        communicationsTimeoutTimer->start(it100CommunicationsTimeoutTime * 1000);
-    }
+    pollTimer->start();
+    communicationsTimeoutTimer->start();
 
     // Start Panel Time Sync Discipliner QTimer
-    timedisciplineTimer->start(1 * 60 * 60 * 1000);
-    onTimeDisciplineTimerTimeout();
+    timedisciplineTimer->start(12 * 60 * 60 * 1000); // 12 hours
+    // onTimeDisciplineTimerTimeout();
 
     // Request System Status
     // Prepare for the flood
@@ -152,12 +146,15 @@ void IT100::onConnected()
   */
 int IT100::processReceivedLine(QByteArray data)
 {
+
     bool error = false;
 
     // Reject packets that are less than 5 chars
     if (data.count() > 5) {
 
-        // update last heard from time
+        // update timeout timers
+        pollTimer->start();
+        communicationsTimeoutTimer->start();
         lastReceivedCommsAt = lastReceivedCommsAt.currentDateTime();
 
         // fyi - we are ignoring the checksum

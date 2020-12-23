@@ -187,7 +187,7 @@ void It100Mqtt::onMqttMessageReceived(QMQTT::Message message)
                     (ascii == 0x2a) || (ascii == 0x23) || (ascii == 0x3c) || (ascii == 0x3e) ||
                     ((ascii >= 0x61) && (ascii <= 0x65)) || (ascii == 0x46)  || (ascii == 0x41)  || (ascii == 0x50)) {
                         it100->sendCommand(IT100::CMD_KEY_PRESSED_VIRT, message.payload());
-                        it100->sendCommand(IT100::CMD_KEY_PRESSED_VIRT, '^'); // keybreak
+                        it100->sendCommand(IT100::CMD_KEY_PRESSED_VIRT, QByteArray("^")); // keybreak
                     }
 
         }
