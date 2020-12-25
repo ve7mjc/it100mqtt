@@ -367,14 +367,15 @@ void It100Mqtt::onIt100ZoneStatusChange(quint8 zone, quint8 partition, ZoneStatu
         writeLog(QString("ZoneStatusChange(partition=%1,zone=%2,status=%3)").arg(partition).arg(zone).arg((qint8)status), LOG_LEVEL_DEBUG);
 }
 
-
 void It100Mqtt::onIt100PartitionArmedDescriptive(quint8 partition, PartitionArmedMode mode)
 {
-    QString armed_mode = "armed_away";
+    QString armed_mode = "armed_away";  
     QString hass_armed_mode = "armed_away";
-    if (mode == PARTITION_ARMED_STAY || mode == PARTITION_ARMED_STAY_NODELAY)
+    if (mode == PARTITION_ARMED_STAY || mode == PARTITION_ARMED_STAY_NODELAY) {
         armed_mode = "armed_stay";
         hass_armed_mode = "armed_home";
+        qDebug() << "ARMED STAY!";
+    }
         
     if (!it100->isWaitingForStatusUpdate())
         writeMqtt(QString("%1/partition/%2/event").arg(mqttTopicPrefix).arg(partition),armed_mode);
@@ -389,9 +390,6 @@ void It100Mqtt::onIt100PartitionArmedDescriptive(quint8 partition, PartitionArme
     // panel.partition(partition)->armed = true;
 
 }
-
-
-
 
 void It100Mqtt::onIt100PartitionStatusChange(quint8 partition, PartitionStatus status)
 {

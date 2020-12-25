@@ -256,14 +256,23 @@ int IT100::processReceivedLine(QByteArray data)
         // Partition Events
         // ################
 
-        // Partition Armed
+        // 652 Partition Armed; Data Bytes: 2; Partition 1-8, Mode.
+        // This command indicates that a partition has been armed and the mode
+        //  it has been armed in. This command is sent at the end of the 
+        //  exit-delay and after the Bell Cutoff expires.
+        //  Modes = 0 Away; 1 Stay; 2 Away, No Delay; 3 Stay, No Delay
         if (command == CMD_PARTITION_ARMED_DESCRIPTIVE_MODE) {
+            
             quint8 partition = data.mid(3,1).toInt();
-            PartitionArmedMode mode = (PartitionArmedMode)data.mid(4,1).toInt();
+            // quint8 mode = static_cast<quint8>(data.mid(4,1).toInt());
+            PartitionArmedMode mode = static_cast<PartitionArmedMode>(data.mid(4,1).toInt());
+            
             if (_debugMode)
-                qDebug() << qPrintable(QString("%1: Partition %2 Armed")
+                qDebug() << qPrintable(QString("%1: Partition %2 Armed - Descriptive Mode (%3)")
                     .arg(timestamp)
-                    .arg(partition));
+                    .arg(partition)
+                    .arg((int)mode));
+
             emit partitionArmedDescriptive(partition, mode);
         }
 
