@@ -13,6 +13,7 @@
 #include <QDebug>
 
 #include "it100message.h"
+#include "commonservice.h"
 
 static const quint8 it100CommunicationsTimeoutTime = 30; // >= 5
 static const quint8 it100TcpConnecionRetryTimeSeconds = 5;
@@ -89,6 +90,8 @@ class IT100 : public QObject
 public:
     
     IT100(InterfaceType interfaceType, bool debugMode = false);
+
+    ComponentStatus getStatus() { return status; }
 
     InterfaceType interfaceType;
 
@@ -242,6 +245,8 @@ public:
 
 private:
 
+    ComponentStatus status = COMP_STATUS_UNKNOWN;
+
     QTcpSocket *socket;
     bool _connected;
     bool _connectionIntent;
@@ -272,6 +277,8 @@ private:
     QTimer *timedisciplineTimer;
     QTimer *communicationsTimeoutTimer;
     QTimer *moduleReconnectTimer;
+
+
 
 private slots:
 

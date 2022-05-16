@@ -5,6 +5,12 @@
 #define QMQTT_LIBRARY
 #endif
 
+// #ifdef USE_SYSTEMD
+#include <systemd/sd-daemon.h>
+#include <fcntl.h>
+#include <time.h>
+// #endif
+
 #include <QLoggingCategory>
 
 #include "graylog.h"
@@ -13,6 +19,8 @@
 #include <qmqtt/qmqtt.h>
 
 #include <QCoreApplication>
+
+#include "commonservice.h"
 
 enum LogLevel {
     LOG_LEVEL_ERROR,
@@ -52,10 +60,15 @@ public:
     QString mqttClientName;
     QString mqttTopicPrefix; // idac/module/[mqttClientName]/
 
-    IT100 *it100;
+    IT100 *it100 = nullptr;
     
     bool failed() { return _failed; }
 
+    // state of service
+    // it100 communicating correctly? -- not timed out?
+    // MQTT connected -- not timed out?
+
+    void updateServiceStatus();
 
 private:
 
@@ -77,6 +90,8 @@ private:
     QString it100UserCode;
     QHostAddress m_mqttRemoteHost;
     quint16 m_mqttRemotePort;
+
+    ComponentStatus mqttStatus = COMP_STATUS_UNKNOWN;
 
 signals:
 

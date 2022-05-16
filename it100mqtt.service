@@ -1,0 +1,17 @@
+[Unit]
+Description=IT100 MQTT Bridge
+Requires=ser2net.service emqx.service
+
+[Service]
+Type=notify
+User=mcurrie
+
+WorkingDirectory=/opt/it100mqtt
+ExecStart=/opt/it100mqtt/it100mqtt settings.cfg
+
+TimeoutStartSec=10
+NotifyAccess=all
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

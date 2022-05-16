@@ -17,7 +17,8 @@ It100Mqtt::It100Mqtt(QString settingsFile, QObject *parent) :
         
         // General INI
         debugMode = settings->value("debug", false).toBool();
-        if (debugMode) qDebug() << "debug mode enabled!";
+        if (debugMode) qDebug() <<
+         "debug mode enabled!";
         
         settings->beginGroup("it100");
         it100RemoteHost = settings->value("host", QString()).toString();
@@ -106,6 +107,18 @@ It100Mqtt::It100Mqtt(QString settingsFile, QObject *parent) :
 }
 
 
+void It100Mqtt::updateServiceStatus()
+{
+    // is IT100 module communicating correctly?
+    if (it100->getStatus() == COMP_STATUS_OK && 
+            mqttStatus == COMP_STATUS_OK) {
+        sd_notify (0, "READY=1");
+    } else {
+        // todo: determine difference between starting and failed
+        // sd_notify(0, "STATUS=FAILED");
+    }
+}
+
 void It100Mqtt::onIt100VirtualKeypadDisplayUpdate()
 {
 	// send as QOS 1 (QOS 2 not supported by RabbitMQ MQTT)
@@ -126,7 +139,8 @@ void It100Mqtt::onMqttConnect()
     // than for QoS1 to ensure no duplication of messages occurs.
     //
     client->subscribe(QString("%1/command").arg(mqttTopicPrefix), QOS_1);
-    
+    mqttStatus = COMP_STATUS_OK;
+    updateServiceStatus();
     // writeMqtt(QString("%1/partition/1/arm_status").arg(mqttTopicPrefix), "unknown", QOS_1, true);
 
 }
@@ -135,7 +149,8 @@ void It100Mqtt::onMqttDisconnected()
 {
     QTimer::singleShot(1000, this, SLOT(reconnectTimerTimeout()));
     graylog->sendMessage("it100-mqtt mqtt disconnected", LevelNotice);
-
+    mqttStatus = COMP_STATUS_FAILED;
+    updateServiceStatus();
 }
 
 void It100Mqtt::reconnectTimerTimeout()
@@ -146,7 +161,6 @@ void It100Mqtt::reconnectTimerTimeout()
 
 void It100Mqtt::onMqttMessageReceived(QMQTT::Message message)
 {
-
     QString payload = QString(message.payload()).toLower();
 
     QString logMessage = QString("Received MQTT Message: %1 %2 (id=%3;qos=%4)")
@@ -262,7 +276,6 @@ void It100Mqtt::onIt100Connected()
     // This is a TCP connection only and does not infer
     // good communications with the module
     // See ::onIt100CommunicationsBegin() for this
-    
     writeMqtt(QString("client/%1").arg(mqttClientName), "{ \"connected:\" : \"true\" }", QOS_1, true);
     writeLog(QString("Connected to IT100 at %1:%2").arg(it100->remoteHostAddress.toString()).arg(it100->remoteHostPort), LOG_LEVEL_DEBUG);
     graylog->sendMessage("Connected to it100 via tcp", LevelInformational);
@@ -281,6 +294,8 @@ void It100Mqtt::onIt100CommunicationsBegin()
     writeMqtt(QString("%1/availability").arg(mqttTopicPrefix),"online",QOS_1,true);
     writeLog("IT-100 is communicating", LOG_LEVEL_NOTICE);
     graylog->sendMessage("it100 module is communicating", LevelNotice);
+    
+    updateServiceStatus();
 }
 
 void It100Mqtt::onIt100CommunicationsTimeout()
@@ -290,6 +305,8 @@ void It100Mqtt::onIt100CommunicationsTimeout()
     writeMqtt(QString("%1/availability").arg(mqttTopicPrefix),"offline",QOS_1,true);
     writeLog("Communications with IT100 has timed out", LOG_LEVEL_ERROR);
     graylog->sendMessage("it100 module communications timeout", LevelNotice);
+
+    updateServiceStatus();
 }
 
 void It100Mqtt::onIt100ZoneStatusChange(quint8 zone, quint8 partition, ZoneStatus status)

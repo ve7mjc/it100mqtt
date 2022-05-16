@@ -459,6 +459,7 @@ int IT100::processReceivedLine(QByteArray data)
     // baud rate mismatches and garbage data.
     if (!error) {
         if (!communicationsGood) {
+            this->status = COMP_STATUS_OK;
             emit communicationsBegin();
             communicationsGood = true;
         }
@@ -514,6 +515,7 @@ void IT100::onCommunicationsTimeoutTimerTimeout()
     if (lastCommsSecs >= it100CommunicationsTimeoutTime) {
         // We are now not communicating with the module
         communicationsGood = false;
+        this->status = COMP_STATUS_FAILED;
         emit communicationsTimeout();
     }
 }
