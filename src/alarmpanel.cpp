@@ -1,5 +1,7 @@
 #include "alarmpanel.h"
 
+#include <QDebug>
+
 AlarmPanel::AlarmPanel(QObject *parent) : QObject(parent)
 {
 

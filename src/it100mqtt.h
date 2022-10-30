@@ -25,6 +25,7 @@
 #include <QObject>
 #include <QTimer>
 #include <QSettings>
+#include <QMap>
 
 enum LogLevel {
     LOG_LEVEL_ERROR,
@@ -71,6 +72,9 @@ public:
 
 private:
 
+    QString nameFromUserCodeSlot(int32_t user);
+    bool loadUserSlots();
+
     bool _failed = false;
 
     AlarmPanel panel;
@@ -78,7 +82,7 @@ private:
     Graylog *graylog;
 
     QTimer *testTimer;
-    QSettings *settings;
+//    QSettings *settings;
 
     quint16 mId;
 
@@ -89,6 +93,9 @@ private:
     QString it100UserCode;
     QHostAddress m_mqttRemoteHost;
     quint16 m_mqttRemotePort;
+
+    QMap<int,QString> userSlots;
+    QString configFile;
 
     ComponentStatus mqttStatus = COMP_STATUS_UNKNOWN;
 
@@ -106,7 +113,7 @@ public slots:
     void onIt100Connected();
     void onIt100Disconnected();
     void onIt100ZoneStatusChange(int16_t zone, int16_t partition, it100::ZoneStatus status);
-    void processIT100UserEvent(it100::UserEventType type, int16_t partition, int16_t user);
+    void processIt100UserEvent(it100::UserEventType type, int16_t partition, int16_t user);
     void onIt100PartitionStatusChange(int16_t partition, it100::PartitionStatus status);
     void onIt100PartitionArmedDescriptive(int16_t partition, it100::PartitionArmedMode mode);
     void onIt100TroubleEvent(it100::TroubleEvent event);

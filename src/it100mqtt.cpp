@@ -7,28 +7,31 @@ It100Mqtt::It100Mqtt(QString settingsFile, QObject *parent) :
     QObject(parent)
 {
 
+    configFile = settingsFile;
+
     // silence the qmqtt debugging noise
     QLoggingCategory::setFilterRules(QStringLiteral("qmqtt.*=false"));
 
     // Load settings from supplied INI file
     //
-    settings = new QSettings(settingsFile, QSettings::IniFormat,this);
-    if (settings->status() != QSettings::NoError) {
+    QSettings settings(settingsFile,QSettings::IniFormat,this);
+    //    settings = new QSettings(settingsFile, QSettings::IniFormat,this);
+    if (settings.status() != QSettings::NoError) {
         qDebug() << "Error accessing settings.cfg";
         writeLog("Error accessing settings.cfg", LOG_LEVEL_ERROR);
     }
     else {
         
         // General INI
-        debugMode = settings->value("debug", false).toBool();
+        debugMode = settings.value("debug", false).toBool();
         if (debugMode) qDebug() <<
          "debug mode enabled!";
         
-        settings->beginGroup("it100");
-        it100RemoteHost = settings->value("host", QString()).toString();
-        it100RemotePort = settings->value("port", 0).toInt(); // quint16
-        it100UserCode = settings->value("user_code", QString()).toString();
-        settings->endGroup();
+        settings.beginGroup("it100");
+        it100RemoteHost = settings.value("host", QString()).toString();
+        it100RemotePort = settings.value("port", 0).toInt(); // quint16
+        it100UserCode = settings.value("user_code", QString()).toString();
+        settings.endGroup();
         
         if (it100RemotePort == 0) {
             qDebug() << "error: unable to load configuration; exiting";
@@ -36,38 +39,38 @@ It100Mqtt::It100Mqtt(QString settingsFile, QObject *parent) :
             return;
         };
 
-        settings->beginGroup("mqtt");
-        m_mqttRemoteHost = settings->value("host", QString()).toString();
-        m_mqttRemotePort = settings->value("port", QString()).toInt();
-        mqttClientName = settings->value("client_name",
+        settings.beginGroup("mqtt");
+        m_mqttRemoteHost = settings.value("host", QString()).toString();
+        m_mqttRemotePort = settings.value("port", QString()).toInt();
+        mqttClientName = settings.value("client_name",
                                          QString("it100")).toString();
-        mqttTopicPrefix = settings->value("topic_prefix",
+        mqttTopicPrefix = settings.value("topic_prefix",
                                           QString("alarm/")).toString();
         mqttTopicPrefix = mqttTopicPrefix.append(mqttClientName);
-        settings->endGroup();
+        settings.endGroup();
 
         // Graylog
-        settings->beginGroup("graylog");
+        settings.beginGroup("graylog");
 
         // Check if host and port are set -- if not, we will not enable graylog
-        if (settings->value("host").isValid() && settings->value("port").isValid()) {
+        if (settings.value("host").isValid() && settings.value("port").isValid()) {
             QString grayLogName = "it100";
-            if (settings->value("name").isValid()) grayLogName = \
-                    settings->value("name").toString();
+            if (settings.value("name").isValid()) grayLogName = \
+                    settings.value("name").toString();
             graylog = new Graylog(grayLogName,
-                                settings->value("host", QString()).toString(),
-                                settings->value("port", quint16()).toInt());
+                                settings.value("host", QString()).toString(),
+                                settings.value("port", quint16()).toInt());
             qDebug() << qPrintable(QString("Graylog2 configured for %1 at %2:%3")
                                .arg(grayLogName)
-                               .arg(settings->value("host", QString()).toString())
-                               .arg(settings->value("port", quint16()).toInt()));
+                               .arg(settings.value("host", QString()).toString())
+                               .arg(settings.value("port", quint16()).toInt()));
         } else {
             graylog = new Graylog();
             graylog->setEnabled(false);
         }
-        settings->endGroup();
+        settings.endGroup();
 
-        this->it100 = new it100::IT100(it100::IFACE_IPSERIAL,debugMode);
+        it100 = new it100::IT100(it100::IFACE_IPSERIAL,debugMode);
 
         // Configure MQTT
         client = new QMQTT::Client();
@@ -112,6 +115,9 @@ It100Mqtt::It100Mqtt(QString settingsFile, QObject *parent) :
         connect(it100, &it100::IT100::partitionArmedDescriptive,
                 this, &It100Mqtt::onIt100PartitionArmedDescriptive);
 
+        // load from disk
+        loadUserSlots();
+
         // Go ahead and connect
         connectToMqttBroker(m_mqttRemoteHost, m_mqttRemotePort);
         connectToIt100(it100RemoteHost, it100RemotePort);
@@ -131,6 +137,31 @@ void It100Mqtt::updateServiceStatus()
         // todo: determine difference between starting and failed
         // sd_notify(0, "STATUS=FAILED");
     }
+}
+
+QString It100Mqtt::nameFromUserCodeSlot(int32_t user)
+{
+    loadUserSlots();
+
+    if (!userSlots.contains(user)) return "unknown";
+
+    return userSlots.value(user);
+}
+
+bool It100Mqtt::loadUserSlots()
+{
+    userSlots.clear();
+    QSettings settings(configFile,QSettings::IniFormat,this);
+    settings.beginGroup("users");
+    foreach ( auto key, settings.childKeys() ) {
+        // make sure we dont try to add anything without a key as this is likely
+        // a mistake
+        if (key.toInt() <= 0 || key.toInt() > 1000) continue;
+
+        userSlots.insert(key.toInt(),settings.value(key).toString());
+        qDebug() << "added" << key.toInt() << settings.value(key).toString();
+    }
+    settings.endGroup();
 }
 
 void It100Mqtt::onIt100VirtualKeypadDisplayUpdate()
@@ -441,18 +472,32 @@ void It100Mqtt::onIt100ZoneStatusChange(int16_t zone, int16_t partition, it100::
 void It100Mqtt::processIt100UserEvent(it100::UserEventType type,
                                int16_t partition, int16_t user)
 {
+    QString userLabel = nameFromUserCodeSlot(user);
+
+    if (type == it100::UserOpening) {
+        writeMqtt(QString("%1/partition/%2/user_disarmed")
+            .arg(mqttTopicPrefix).arg(partition),QString("%1:%2")
+                  .arg(user).arg(userLabel),QOS_1);
+    } else if (type == it100::UserClosing) {
+        writeMqtt(QString("%1/partition/%2/user_armed")
+            .arg(mqttTopicPrefix).arg(partition),QString("%1:%2")
+                  .arg(user).arg(userLabel),QOS_1);
+    }
+
     // produce json string of event
     QString userStr;
-    if (user >= 0) userStr = QString(" ,user=%1").arg(user);
-    QString event = QString("{ partition=%1%2 }")
+    if (user >= 0) userStr = QString(", \"user\":%1, \"label\":\"%2\"")
+            .arg(user).arg(userLabel);
+    QString eventJson = QString("{ \"type\":\"%1\", \"partition\":%2%3 }")
+            .arg(it100::IT100::userEventTypeToString(type))
             .arg(partition).arg(userStr);
 
     writeMqtt(QString("%1/partition/%2/user_event")
-            .arg(mqttTopicPrefix).arg(partition),event, QOS_1);
+            .arg(mqttTopicPrefix).arg(partition),eventJson, QOS_1);
 
-    writeLog(QString("UserEvent: type=%1; partition=%2, user=%3")
+    writeLog(QString("UserEvent: type=%1; partition=%2, user=%3, label=%4")
             .arg(it100::IT100::userEventTypeToString(type))
-            .arg(partition).arg(user), LOG_LEVEL_NOTICE);
+            .arg(partition).arg(user).arg(userLabel), LOG_LEVEL_NOTICE);
 }
 
 void It100Mqtt::onIt100PartitionArmedDescriptive(int16_t partition,
