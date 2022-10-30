@@ -9,5 +9,7 @@ make
 cd ../
 
 ln -sTf build/it100mqtt it100mqtt
+
+# copy example settings if no local settings present
 cp -n settings-example.cfg settings.cfg
 
