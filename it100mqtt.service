@@ -1,5 +1,6 @@
 [Unit]
 Description=IT100 MQTT Bridge
+After=ser2net.service emqx.service network.target
 Requires=ser2net.service emqx.service
 
 [Service]
