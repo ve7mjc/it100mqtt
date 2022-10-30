@@ -22,6 +22,10 @@
 
 #include "commonservice.h"
 
+#include <QObject>
+#include <QTimer>
+#include <QSettings>
+
 enum LogLevel {
     LOG_LEVEL_ERROR,
     LOG_LEVEL_SECURITY,
@@ -34,11 +38,6 @@ enum QosLevel {
     QOS_1 = 1,
     QOS_2 = 2
 };
-
-#include <QDebug>
-#include <QObject>
-#include <QTimer>
-#include <QSettings>
 
 class It100Mqtt : public QObject
 {
@@ -60,7 +59,7 @@ public:
     QString mqttClientName;
     QString mqttTopicPrefix; // idac/module/[mqttClientName]/
 
-    IT100 *it100 = nullptr;
+    it100::IT100 *it100 = nullptr;
     
     bool failed() { return _failed; }
 
@@ -106,10 +105,11 @@ public slots:
 
     void onIt100Connected();
     void onIt100Disconnected();
-    void onIt100ZoneStatusChange(quint8 zone, quint8 partition, ZoneStatus status);
-    void onIt100PartitionStatusChange(quint8 partition, PartitionStatus status);
-    void onIt100PartitionArmedDescriptive(quint8 partition, PartitionArmedMode mode);
-    void onIt100TroubleEvent(TroubleEvent event);
+    void onIt100ZoneStatusChange(int16_t zone, int16_t partition, it100::ZoneStatus status);
+    void processIT100UserEvent(it100::UserEventType type, int16_t partition, int16_t user);
+    void onIt100PartitionStatusChange(int16_t partition, it100::PartitionStatus status);
+    void onIt100PartitionArmedDescriptive(int16_t partition, it100::PartitionArmedMode mode);
+    void onIt100TroubleEvent(it100::TroubleEvent event);
     void onIt100VirtualKeypadDisplayUpdate();
     void onIt100CommunicationsBegin();
     void onIt100CommunicationsTimeout();

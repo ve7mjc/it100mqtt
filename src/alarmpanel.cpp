@@ -5,7 +5,7 @@ AlarmPanel::AlarmPanel(QObject *parent) : QObject(parent)
 
 }
 
-Partition *AlarmPanel::partition(uint num) {
+Partition *AlarmPanel::partition(int32_t num) {
 
     // add knowledge of partition if it does not exist
     if (partitions.count()<num) {

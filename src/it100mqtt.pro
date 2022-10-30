@@ -3,6 +3,7 @@ QT       -= gui
 
 TARGET = it100mqtt
 
+CONFIG += c++17
 CONFIG   += network
 CONFIG   -= app_bundle
 
@@ -24,6 +25,7 @@ SOURCES += main.cpp \
 
 HEADERS += \
     it100.h \
+    it100commands.h \
     it100mqtt.h \
     it100message.h \
     graylog.h \

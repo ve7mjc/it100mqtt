@@ -13,7 +13,7 @@ class AlarmPanel : public QObject
 public:
     explicit AlarmPanel(QObject *parent = nullptr);
 
-    Partition *partition(uint num);
+    Partition *partition(int32_t num);
 
 private:
 
@@ -36,7 +36,7 @@ public:
 
     QList<Zone*> zones;
     bool armed;
-    PartitionArmedMode armed_mode;
+    it100::PartitionArmedMode armed_mode;
 
 };
 

@@ -4,10 +4,17 @@
   */
 
 #include "it100.h"
+#include "it100commands.h"
+
+#include <QDebug>
+
+namespace it100 {
 
 IT100::IT100(InterfaceType interfaceType, bool debugMode)
 {
-    
+    // reserved for serial port
+    Q_UNUSED(interfaceType)
+
     _debugMode = debugMode;
     
     // we have not yet begun communicating
@@ -19,11 +26,11 @@ IT100::IT100(InterfaceType interfaceType, bool debugMode)
 
     // Create TCP Socket
     _connected = false;
-    this->socket = new QTcpSocket();
-    connect(this->socket, SIGNAL(readyRead()), 
-        this, SLOT(onDataAvailable()));
-    connect(this->socket, SIGNAL(stateChanged(QAbstractSocket::SocketState)),
-            this, SLOT(onTcpSocketStateChanged(QAbstractSocket::SocketState)));
+    socket = new QTcpSocket();
+    connect(socket, &QTcpSocket::readyRead,
+        this, &IT100::processTcpSocketReadyRead);
+    connect(socket, &QTcpSocket::stateChanged,
+            this, &IT100::processTcpSocketStateChange);
 
     // Module Reconnect Timer
     moduleReconnectTimer = new QTimer();
@@ -31,24 +38,24 @@ IT100::IT100(InterfaceType interfaceType, bool debugMode)
     // Panel Clock Discipline Timer
     // Keep DSC alarm panel in sync with system time
     timedisciplineTimer = new QTimer(this);
-    connect(timedisciplineTimer, SIGNAL(timeout()), 
-        this, SLOT(onTimeDisciplineTimerTimeout()));
+    connect(timedisciplineTimer, &QTimer::timeout,
+        this, &IT100::onTimeDisciplineTimerTimeout);
 
     // Communications Timeout Timer
     communicationsTimeoutTimer = new QTimer(this);
-    communicationsTimeoutTimer->setInterval(it100CommunicationsTimeoutTime * 1000);
-    connect(communicationsTimeoutTimer, SIGNAL(timeout()), 
-        this, SLOT(onCommunicationsTimeoutTimerTimeout()));
+    communicationsTimeoutTimer->setInterval(socketDataReceiveTimeoutSecs * 1000);
+    connect(communicationsTimeoutTimer, &QTimer::timeout,
+        this, &IT100::onCommunicationsTimeoutTimerTimeout);
         
     // QTimer Poll Timer
-    this->pollTimer = new QTimer(this);
-    this->pollTimer->setInterval((it100CommunicationsTimeoutTime-1) * 1000);
-    connect(this->pollTimer, SIGNAL(timeout()), 
-        this, SLOT(onPollTimerTimeout()));
+    pollTimer = new QTimer(this);
+    pollTimer->setInterval((socketDataReceiveTimeoutSecs-1) * 1000);
+    connect(pollTimer, &QTimer::timeout,
+        this, &IT100::onPollTimerTimeout);
 
 }
 
-bool IT100::setUserCode(quint32 code)
+bool IT100::setUserCode(uint32_t code)
 {
     if ((code > 999) && (code < 1000000)) {
         panelUserCode = code;
@@ -59,7 +66,7 @@ bool IT100::setUserCode(quint32 code)
     }
 }
 
-bool IT100::setProgrammerCode(quint32 code)
+bool IT100::setProgrammerCode(uint32_t code)
 {
     if ((code > 999) && (code < 1000000)) {
         panelProgrammerCode = code;
@@ -73,17 +80,18 @@ bool IT100::setProgrammerCode(quint32 code)
 /**
   * onDataAvailable()
   */
-void IT100::onDataAvailable()
+void IT100::processTcpSocketReadyRead()
 {
-    int numBytesAvail = socket->bytesAvailable();
+    int64_t numBytesAvail = socket->bytesAvailable();
     if (!numBytesAvail) return;
  
     QByteArray receivedBytes;
-    receivedBytes.resize(numBytesAvail);
+    receivedBytes.resize(static_cast<int>(numBytesAvail));
     socket->read(receivedBytes.data(),receivedBytes.size());
 
     // Tokenize for newlines
-    receivedData+=QString::fromUtf8(receivedBytes.data(),receivedBytes.size());
+    receivedData += QString::fromUtf8(receivedBytes.data(),
+                                      receivedBytes.size());
     if(receivedData.contains('\n'))
     {
         QStringList lineList=receivedData.split(QRegExp("\r\n|\n"));
@@ -105,7 +113,7 @@ void IT100::onDataAvailable()
 /**
   * open(portName)
   */
-void IT100::open(QHostAddress remoteAddr, quint16 port)
+void IT100::open(QHostAddress remoteAddr, uint16_t port)
 {
     remoteHostAddress = remoteAddr;
     remoteHostPort = port;
@@ -123,7 +131,7 @@ void IT100::open()
     open(remoteHostAddress,remoteHostPort);
 }
 
-void IT100::onConnected()
+void IT100::processTcpSocketConnected()
 {
 
     pollTimer->start();
@@ -263,22 +271,22 @@ int IT100::processReceivedLine(QByteArray data)
         //  Modes = 0 Away; 1 Stay; 2 Away, No Delay; 3 Stay, No Delay
         if (command == CMD_PARTITION_ARMED_DESCRIPTIVE_MODE) {
             
-            quint8 partition = data.mid(3,1).toInt();
-            // quint8 mode = static_cast<quint8>(data.mid(4,1).toInt());
+            int partition = data.mid(3,1).toInt();
+            // int mode = static_cast<int>(data.mid(4,1).toInt());
             PartitionArmedMode mode = static_cast<PartitionArmedMode>(data.mid(4,1).toInt());
             
             if (_debugMode)
                 qDebug() << qPrintable(QString("%1: Partition %2 Armed - Descriptive Mode (%3)")
                     .arg(timestamp)
                     .arg(partition)
-                    .arg((int)mode));
+                    .arg(static_cast<int>(mode)));
 
             emit partitionArmedDescriptive(partition, mode);
         }
 
         // 655 Partition Disarmed
         if (command == CMD_PARTITION_DISARMED) {
-            quint8 partition = data.mid(3,1).toInt();
+            int partition = data.mid(3,1).toInt();
             emit partitionStatusChanged(partition, PARTITION_STATUS_DISARMED);
             if (_debugMode)
                 qDebug() << qPrintable(QString("%1: Partition %2 Disarmed")
@@ -288,7 +296,7 @@ int IT100::processReceivedLine(QByteArray data)
 
         // 653 Partition is n Ready to "Force Arm" aka there is a zone violated
         if (command == CMD_PARTITION_IN_READY_TO_FORCE_ALARM) {
-            quint8 partition = data.mid(3,1).toInt();
+            int partition = data.mid(3,1).toInt();
             emit partitionStatusChanged(partition, PARTITION_STATUS_READY_FORCE_ARM);
             if (_debugMode) qDebug() << qPrintable(QString("%1: Partition %2 Ready to Force Arm")
                 .arg(timestamp)
@@ -296,7 +304,7 @@ int IT100::processReceivedLine(QByteArray data)
         }
 
         if (command == CMD_PARTITION_IN_ALARM) {
-            quint8 partition = data.mid(3,1).toInt();
+            int partition = data.mid(3,1).toInt();
             emit partitionStatusChanged(partition, PARTITION_STATUS_ALARM);
         }
 
@@ -316,20 +324,41 @@ int IT100::processReceivedLine(QByteArray data)
             emit partitionStatusChanged(partition, PARTITION_STATUS_BUSY);
         }
 
-        // User Closing
+        // 700 User Closing
         // Partition has been armed by a user
-        // includes user code
+        //  - includes user code 0000 - 0042
         if (command == CMD_USER_CLOSING) {
             int partition = data.mid(3,1).toInt();
+            int user = data.mid(4,4).toInt();
+            emit userEvent(UserEventType::UserClosing,partition,user);
+            emit userClosing(partition,user);
             emit partitionStatusChanged(partition, PARTITION_STATUS_USER_CLOSING);
         }
 
-        // Partition Partial Closing
+        // 701 Special Closing
+        // Partition has been armed by one of the following:
+        // Quick Arm, Auto Arm, Keyswitch, DLS Software, Wireless Key
+        if (command == CMD_SPECIAL_CLOSING) {
+            int partition = data.mid(3,1).toInt();
+            emit specialClosing(partition);
+        }
+
+        // 702 Partition Partial Closing
         // Partition has been armed but one or more
         // zones have been bypassed
         if (command == CMD_PARTIAL_CLOSING) {
             int partition = data.mid(3,1).toInt();
+            emit partialClosing(partition);
             emit partitionStatusChanged(partition, PARTITION_STATUS_PARTIAL_CLOSING);
+        }
+
+        // 750 User Opening
+        // Partition has been disarmed by a user
+        if (command == CMD_USER_OPENING) {
+            int partition = data.mid(3,1).toInt();
+            int user = data.mid(4,4).toInt();
+            emit userEvent(UserEventType::UserOpening,partition,user);
+            emit userOpening(partition,user);
         }
 
         if (command == CMD_EXIT_DELAY_IN_PROGRESS) {
@@ -347,10 +376,13 @@ int IT100::processReceivedLine(QByteArray data)
         if (command == CMD_SPECIAL_CLOSING) {
             int partition = data.mid(3,1).toInt();
             emit partitionStatusChanged(partition, PARTITION_STATUS_PARTIAL_CLOSING);
+            emit specialClosing(partition);
         }
 
         if (command == CMD_INVALID_ACCESS_CODE) {
             int partition = data.mid(3,1).toInt();
+            emit userEvent(UserEventType::UserClosing,partition,-1);
+            emit invalidAccessCode(partition);
             emit partitionStatusChanged(partition, PARTITION_STATUS_INVALID_ACCESS_CODE);
         }
 
@@ -362,9 +394,9 @@ int IT100::processReceivedLine(QByteArray data)
         if (command == CMD_LCD_UPDATE) {
 
             // qDebug() << "CMD_LCD_UPDATE " << payload;
-            quint8 lineNumber = payload.left(1).toInt();
-            quint8 columnNumber = payload.mid(1,2).toInt();
-            quint8 characters = payload.mid(3,2).toInt();
+            int lineNumber = payload.left(1).toInt();
+            int columnNumber = payload.mid(1,2).toInt();
+            int characters = payload.mid(3,2).toInt();
             QString content = payload.right(payload.length()-5);
 
             // TODO, account for character modifications vice line updates
@@ -457,12 +489,10 @@ int IT100::processReceivedLine(QByteArray data)
     // Determine we have good communications so we can update our
     // broker status.  This should be improved to take into account
     // baud rate mismatches and garbage data.
-    if (!error) {
-        if (!communicationsGood) {
-            this->status = COMP_STATUS_OK;
-            emit communicationsBegin();
-            communicationsGood = true;
-        }
+    if (!error && !communicationsGood) {
+        this->status = COMP_STATUS_OK;
+        emit communicationsBegin();
+        communicationsGood = true;
     }
 
     // In the game of ping pong, we can now consider ourselves to not be waiting
@@ -470,6 +500,8 @@ int IT100::processReceivedLine(QByteArray data)
     // albeit certain commands result in a flood of return messages such
     // as the status request
     writePacket();
+
+    return !error;
 
 }
 
@@ -494,6 +526,13 @@ bool IT100::isWaitingForStatusUpdate()
     return _waitingForStatusUpdate;
 }
 
+// convert enum class IT100:UserEventType to string
+QString IT100::userEventTypeToString(UserEventType type)
+{
+    QMetaEnum metaEnum = QMetaEnum::fromType<UserEventType>();
+    return metaEnum.valueToKey(type);
+}
+
 /**
   * onTimeDiscipliner()
   * called by QTimer
@@ -510,9 +549,10 @@ void IT100::onTimeDisciplineTimerTimeout()
 
 void IT100::onCommunicationsTimeoutTimerTimeout()
 {
-    int lastCommsSecs = lastReceivedCommsAt.secsTo(QDateTime::currentDateTime());
+    int64_t lastCommsSecs = lastReceivedCommsAt.secsTo(
+                QDateTime::currentDateTime());
 
-    if (lastCommsSecs >= it100CommunicationsTimeoutTime) {
+    if (lastCommsSecs >= socketDataReceiveTimeoutSecs) {
         // We are now not communicating with the module
         communicationsGood = false;
         this->status = COMP_STATUS_FAILED;
@@ -522,7 +562,7 @@ void IT100::onCommunicationsTimeoutTimerTimeout()
 
 // this method is called every it100TcpConnecionRetryTimeSeconds * 1000ms
 // until connected - never give up!
-void IT100::on_moduleReconnectTimerTimeout()
+void IT100::processModuleReconnectTimerTimeout()
 {
     this->open();
 }
@@ -601,7 +641,7 @@ void IT100::sendCommand(QByteArray command, QByteArray data)
 
 }
 
-void IT100::sendCommand(QByteArray command, quint16 data)
+void IT100::sendCommand(QByteArray command, uint16_t data)
 {
     sendCommand(command,QByteArray::number(data));
 }
@@ -654,7 +694,7 @@ QString IT100::getZoneFriendlyName(int zoneNumber)
         return QString("undefined");
 }
 
-void IT100::onTcpSocketStateChanged(QAbstractSocket::SocketState state)
+void IT100::processTcpSocketStateChange(QAbstractSocket::SocketState state)
 {
     switch (state) {
     case QAbstractSocket::HostLookupState:
@@ -671,7 +711,7 @@ void IT100::onTcpSocketStateChanged(QAbstractSocket::SocketState state)
         _connected = true;
         _connectionAttempts = 0;
         waitingForResponse = false; // need to get things going again
-        onConnected();
+        processTcpSocketConnected();
         emit connected();
         qDebug() << qPrintable(QString("connected to it100 %1 tcp/%2")
             .arg(remoteHostAddress.toString())
@@ -701,7 +741,7 @@ void IT100::onTcpSocketStateChanged(QAbstractSocket::SocketState state)
                     if (_debugMode) qDebug() << qPrintable(
                         QString("starting reconnect timer; every %1 seconds")
                             .arg(3));
-                QTimer::singleShot(it100TcpConnecionRetryTimeSeconds * 1000, 
+                QTimer::singleShot(socketConnectRetrySecs * 1000,
                     this, SLOT(on_moduleReconnectTimerTimeout()));
             }
         }
@@ -716,7 +756,7 @@ void IT100::onTcpSocketStateChanged(QAbstractSocket::SocketState state)
 
 // Connection Retry Delay Period has expired
 // attempt another connection
-void IT100::onTcpConnectRetryTimeout()
+void IT100::processTcpConnectRetryTimeout()
 {
     open();
 }
@@ -726,142 +766,37 @@ void IT100::setRemoteHostAddress(QHostAddress address)
     remoteHostAddress = address;
 }
 
-void IT100::setRemoteHostPort(quint16 port)
+void IT100::setRemoteHostPort(uint16_t port)
 {
     remoteHostPort = port;
 }
 
-void IT100::armAway(quint8 partition)
+void IT100::armAway(int partition)
 {
-    sendCommand(IT100::CMD_PARTITION_ARM_CONTROL_AWAY,QByteArray::number(partition));
+    sendCommand(it100::CMD_PARTITION_ARM_CONTROL_AWAY,
+                QByteArray::number(partition));
 }
 
-void IT100::armStay(quint8 partition)
+void IT100::armStay(int partition)
 {
-    sendCommand(IT100::CMD_PARTITION_ARM_CONTROL_STAY,QByteArray::number(partition));
+    sendCommand(it100::CMD_PARTITION_ARM_CONTROL_STAY,
+                QByteArray::number(partition));
 }
 
-void IT100::disarm(quint8 partition)
+void IT100::disarm(int partition)
 {
     QByteArray code = QByteArray::number(panelUserCode);
     for(int i = code.length(); i < 6; i++) code.append("0"); // padd zeros to 6 digits
-    sendCommand(IT100::CMD_PARTITION_DISARM_CONTROL_WITH_CODE,
+    sendCommand(it100::CMD_PARTITION_DISARM_CONTROL_WITH_CODE,
         QByteArray::number(partition).append(code));
     qDebug() << "code is " << code;
 }
 
-void IT100::virtualKeypadEnable(bool value)
+void IT100::setEnableVirtualKeypad(bool value)
 {
-    sendCommand(IT100::CMD_VIRTUAL_KEYPAD_CONTROL,(quint8)value);
+    sendCommand(it100::CMD_VIRTUAL_KEYPAD_CONTROL,
+                static_cast<uint16_t>(value));
 }
 
-/**
-  * Application Originated Commands
-  */
-const QByteArray IT100::CMD_POLL = "000";
-const QByteArray IT100::CMD_STATUS_REQUEST = "001";
-const QByteArray IT100::CMD_LABELS_REQUEST = "002";
-const QByteArray IT100::CMD_SET_TIME_AND_DATE = "010";
-const QByteArray IT100::CMD_COMMAND_OUTPUT_CONTROL = "020";
-const QByteArray IT100::CMD_PARTITION_ARM_CONTROL_AWAY = "030";
-const QByteArray IT100::CMD_PARTITION_ARM_CONTROL_STAY = "031";
-const QByteArray IT100::CMD_PARTITION_ARM_CONTROL_ARMED_NO_ENTRY_DELAY = "032";
-const QByteArray IT100::CMD_PARTITION_ARM_CONTROL_WITH_CODE = "033";
-const QByteArray IT100::CMD_PARTITION_DISARM_CONTROL_WITH_CODE = "040";
-const QByteArray IT100::CMD_TIME_STAMP_CONTROL = "055";
-const QByteArray IT100::CMD_TIME_DATE_BROADCAST_CONTROL = "056";
-const QByteArray IT100::CMD_TEMPERATURE_BROADCAST_CONTROL = "057";
-const QByteArray IT100::CMD_VIRTUAL_KEYPAD_CONTROL = "058";
-const QByteArray IT100::CMD_TRIGGER_PANIC_ALARM = "060";
-const QByteArray IT100::CMD_KEY_PRESSED_VIRT = "070";
-const QByteArray IT100::CMD_BAUD_RATE_CHANGE = "080";
-const QByteArray IT100::CMD_GET_TEMPERATURE_SET_POINT = "095";
-const QByteArray IT100::CMD_TEMPERATURE_CHANGE = "096";
-const QByteArray IT100::CMD_SAVE_TEMPERATURE_SETTING = "097";
-const QByteArray IT100::CMD_CODE_SEND = "200";
+} // namespace it100
 
-/**
-  * IT-100 Originated Commands
-  */
-const QByteArray IT100::CMD_COMMAND_ACKNOWLEDGE = "500";
-const QByteArray IT100::CMD_COMMAND_ERROR = "501";
-const QByteArray IT100::CMD_SYSTEM_ERROR = "502";
-const QByteArray IT100::CMD_TIME_DATE_BROADCAST = "550";
-const QByteArray IT100::CMD_RING_DETECETD = "560";
-const QByteArray IT100::CMD_INDOOR_TEMPERATURE_BROADCAST = "561";
-const QByteArray IT100::CMD_OUTDOOR_TEMPERATURE_BROADCAST = "562";
-const QByteArray IT100::CMD_THERMOSTAT_SET_POINTS = "563";
-const QByteArray IT100::CMD_BROADCAST_LABELS = "570";
-const QByteArray IT100::CMD_BAUD_RATE_SET = "580";
-const QByteArray IT100::CMD_ZONE_ALARM = "601";
-const QByteArray IT100::CMD_ZONE_ALARM_RESTORE = "602";
-const QByteArray IT100::CMD_ZONE_TAMPER = "603";
-const QByteArray IT100::CMD_ZONE_TAMPER_RESTORE = "604";
-const QByteArray IT100::CMD_ZONE_FAULT = "605";
-const QByteArray IT100::CMD_ZONE_FAULT_RESTORE = "606";
-const QByteArray IT100::CMD_ZONE_OPEN = "609";
-const QByteArray IT100::CMD_ZONE_RESTORED = "610";
-const QByteArray IT100::CMD_DURESS_ALARM = "620";
-const QByteArray IT100::CMD_F_KEY_ALARM = "621";
-const QByteArray IT100::CMD_F_KEY_RESTORAL = "622";
-const QByteArray IT100::CMD_A_KEY_ALARM = "623";
-const QByteArray IT100::CMD_A_KEY_RESTORAL = "624";
-const QByteArray IT100::CMD_P_KEY_ALARM = "625";
-const QByteArray IT100::CMD_P_KEY_RESTORAL = "626";
-const QByteArray IT100::CMD_AUXILIARY_INPUT_ALARM = "631";
-const QByteArray IT100::CMD_AUXILIARY_INPUT_ALARM_RESTORED = "632";
-const QByteArray IT100::CMD_PARTITION_READY = "626";
-const QByteArray IT100::CMD_PARTITION_NOT_READY = "625";
-const QByteArray IT100::CMD_PARTITION_ARMED_DESCRIPTIVE_MODE = "652";
-const QByteArray IT100::CMD_PARTITION_IN_READY_TO_FORCE_ALARM = "653";
-const QByteArray IT100::CMD_PARTITION_IN_ALARM = "654";
-const QByteArray IT100::CMD_PARTITION_DISARMED = "655";
-const QByteArray IT100::CMD_EXIT_DELAY_IN_PROGRESS = "656";
-const QByteArray IT100::CMD_ENTRY_DELAY_IN_PROGRESS = "657";
-const QByteArray IT100::CMD_KEYPAD_LOCKOUT = "658";
-const QByteArray IT100::CMD_KEYPAD_BLANKING = "659";
-const QByteArray IT100::CMD_COMMAND_OUTPUT_IN_PROGRESS = "660";
-const QByteArray IT100::CMD_INVALID_ACCESS_CODE = "670";
-const QByteArray IT100::CMD_FUNCTION_NOT_AVAILABLE = "671";
-const QByteArray IT100::CMD_FAIL_TO_ARM = "672";
-const QByteArray IT100::CMD_PARTITION_BUSY = "673";
-const QByteArray IT100::CMD_USER_CLOSING = "700";
-const QByteArray IT100::CMD_SPECIAL_CLOSING = "701";
-const QByteArray IT100::CMD_PARTIAL_CLOSING = "702";
-const QByteArray IT100::CMD_USER_OPENING = "750";
-const QByteArray IT100::CMD_SPECIAL_OPENING = "751";
-const QByteArray IT100::CMD_PANEL_BATTERY_TROUBLE = "800";
-const QByteArray IT100::CMD_PANEL_BATTERY_TROUBLE_RESTORE ="801";
-const QByteArray IT100::CMD_PANEL_AC_TROUBLE = "802";
-const QByteArray IT100::CMD_PANEL_AC_RESTORE = "803";
-const QByteArray IT100::CMD_SYSTEM_BELL_TROUBLE ="806";
-const QByteArray IT100::CMD_SYSTEM_BELL_TROUBLE_RESTORAL = "807";
-const QByteArray IT100::CMD_TLM_LINE_1_TROUBLE = "810";
-const QByteArray IT100::CMD_TLM_LINE_1_TROUBLE_RESTORAL = "811";
-const QByteArray IT100::CMD_TLM_LINE_2_TROUBLE = "812";
-const QByteArray IT100::CMD_TLM_LINE_2_TROUBLE_RESTORAL = "813";
-const QByteArray IT100::CMD_FTC_TROUBLE = "814";
-const QByteArray IT100::CMD_BUFFER_NEAR_FULL = "816";
-const QByteArray IT100::CMD_GENERAL_DEVICE_LOW_BATTERY = "821";
-const QByteArray IT100::CMD_GENERAL_DEVICE_LOW_BATTERY_RESTORE = "822";
-const QByteArray IT100::CMD_WIRELESS_KEY_LOW_BATTERY_TROUBLE = "825";
-const QByteArray IT100::CMD_WIRELESS_KEY_LOW_BATTERY_TROUBLE_RESTORE = "826";
-const QByteArray IT100::CMD_HANDHELD_KEYPAD_LOW_BATTERY_TROUBLE = "827";
-const QByteArray IT100::CMD_HANDHELD_KEYPAD_LOW_BATTERY_TROUBLE_RESTORE = "828";
-const QByteArray IT100::CMD_GENERAL_SYSTEM_TAMPER = "829";
-const QByteArray IT100::CMD_GENERAL_SYSTEM_TAMPER_RESTORE = "830";
-const QByteArray IT100::CMD_HOME_AUTOMATION_TROUBLE = "831";
-const QByteArray IT100::CMD_HOME_AUTOMATION_TROUBLE_RESTORE = "832";
-const QByteArray IT100::CMD_TROUBLE_STATUS_LED_ON = "840";
-const QByteArray IT100::CMD_TROUBLE_STATUS_LED_OFF = "841";
-const QByteArray IT100::CMD_FIRE_TROUBLE_ALARM = "842";
-const QByteArray IT100::CMD_FIRE_TROUBLE_ALARM_RESTORE = "843";
-const QByteArray IT100::CMD_CODE_REQUIRED = "900";
-const QByteArray IT100::CMD_LCD_UPDATE = "901";
-const QByteArray IT100::CMD_LCD_CURSOR = "902";
-const QByteArray IT100::CMD_LED_STATUS = "903";
-const QByteArray IT100::CMD_BEEP_STATUS = "904";
-const QByteArray IT100::CMD_TONE_STATUS = "905";
-const QByteArray IT100::CMD_BUZZER_STATUS = "906";
-const QByteArray IT100::CMD_DOOR_CHIME_STATUS = "907";
-const QByteArray IT100::CMD_SOFTWARE_VERSION = "908";

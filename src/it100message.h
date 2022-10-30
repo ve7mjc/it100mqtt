@@ -3,6 +3,8 @@
 
 #include <QObject>
 
+namespace it100 {
+
 class It100Message : public QObject
 {
     Q_OBJECT
@@ -28,5 +30,7 @@ signals:
 public slots:
 
 };
+
+} // namespace it100
 
 #endif // IT100MESSAGE_H

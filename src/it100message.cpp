@@ -1,5 +1,7 @@
 #include "it100message.h"
 
+namespace it100 {
+
 It100Message::It100Message(QByteArray command, QByteArray data, QObject *parent) :
     QObject(parent)
 {
@@ -56,3 +58,5 @@ QByteArray It100Message::generateChecksum(QByteArray *data)
 
     return checksum;
 }
+
+} // namespace it100

@@ -1,7 +1,6 @@
 #ifndef IT100_H
 #define IT100_H
 
-#include <QObject>
 #include <QDateTime>
 #include <QTimer>
 
@@ -10,13 +9,16 @@
 #include <QStringList>
 #include <QTimer>
 #include <QDateTime>
-#include <QDebug>
 
 #include "it100message.h"
 #include "commonservice.h"
 
-static const quint8 it100CommunicationsTimeoutTime = 30; // >= 5
-static const quint8 it100TcpConnecionRetryTimeSeconds = 5;
+namespace it100 {
+
+Q_NAMESPACE
+
+inline static const int socketDataReceiveTimeoutSecs = 30;
+inline static const int socketConnectRetrySecs = 5;
 
 enum InterfaceType {
     IFACE_RS232 = 0,
@@ -33,6 +35,7 @@ enum ZoneStatus {
     ZONE_STATUS_ALARM,
     ZONE_STATUS_ALARM_RESTORED
 };
+
 
 enum PartitionStatus {
     PARTITION_STATUS_ARMED,
@@ -84,6 +87,15 @@ enum TroubleEvent {
     TROUBLE_HOME_AUTOMATION_RESTORE
 };
 
+// these correspond to various it100 based commands
+enum UserEventType {
+    UserKeypadLockout, // 658 Keypad Lock-Out (Partition; NO USER)
+    UserInvalidAccessCode, // 670 Invalid Access Code (Partion; NO USER)
+    UserClosing, // 700 User Closing (Partition + User)
+    UserOpening, // 750 User Opening (Partition + User)
+};
+Q_ENUM_NS(UserEventType)
+
 class IT100 : public QObject
 {
     Q_OBJECT
@@ -93,161 +105,61 @@ public:
 
     ComponentStatus getStatus() { return status; }
 
-    InterfaceType interfaceType;
-
-    QDateTime lastTransmittedCommsAt; // When serial comms last sent to IT-100
-    QDateTime lastReceivedCommsAt; // When serial comms last received
+    static QString userEventTypeToString(UserEventType type);
 
     void open(QHostAddress remoteAddr, quint16 port);
     void open();
     bool isConnected() { return _connected; }
     bool setCommunicationsGood(bool state);
 
-    bool setUserCode(quint32 code);
-    bool setProgrammerCode(quint32 code);
+    bool setUserCode(uint32_t code);
+    bool setProgrammerCode(uint32_t code);
 
     // send command to IT-100 module
     void sendCommand(QByteArray command, QByteArray data);
-    void sendCommand(QByteArray command, quint16 data);
+    void sendCommand(QByteArray command, uint16_t data);
     void sendCommand(QByteArray command);
 
     void setRemoteHostAddress(QHostAddress address);
-    void setRemoteHostPort(quint16 port);
-    void setPanelUserCode(quint16 code) { panelUserCode = code; }
+    void setRemoteHostPort(uint16_t port);
+    void setPanelUserCode(uint32_t code) { panelUserCode = code; }
 
     int setZoneFriendlyName(int zoneNumber, QString name);
     QString getZoneFriendlyName(int zoneNumber);
 
-    void armStay(quint8 partition = 1);
-    void armAway(quint8 partition = 1);
-    void disarm(quint8 partition = 1);
-    void virtualKeypadEnable(bool value = true);
+    void armStay(int partition = 1);
+    void armAway(int partition = 1);
+    void disarm(int partition = 1);
+    void setEnableVirtualKeypad(bool value = true);
 
     bool isWaitingForStatusUpdate();
 
     QHostAddress remoteHostAddress;
-    quint16 remoteHostPort;
+    uint16_t remoteHostPort;
 
     QString zoneFriendlyNames[64];
     QString lcdDisplayContents;
 
-    /**
-      * Application Originated Commands
-      */
-    static const QByteArray CMD_POLL;
-    static const QByteArray CMD_STATUS_REQUEST;
-    static const QByteArray CMD_LABELS_REQUEST;
-    static const QByteArray CMD_SET_TIME_AND_DATE;
-    static const QByteArray CMD_COMMAND_OUTPUT_CONTROL;
-    static const QByteArray CMD_PARTITION_ARM_CONTROL_AWAY;
-    static const QByteArray CMD_PARTITION_ARM_CONTROL_STAY;
-    static const QByteArray CMD_PARTITION_ARM_CONTROL_ARMED_NO_ENTRY_DELAY;
-    static const QByteArray CMD_PARTITION_ARM_CONTROL_WITH_CODE;
-    static const QByteArray CMD_PARTITION_DISARM_CONTROL_WITH_CODE;
-    static const QByteArray CMD_TIME_STAMP_CONTROL;
-    static const QByteArray CMD_TIME_DATE_BROADCAST_CONTROL;
-    static const QByteArray CMD_TEMPERATURE_BROADCAST_CONTROL;
-    static const QByteArray CMD_VIRTUAL_KEYPAD_CONTROL;
-    static const QByteArray CMD_TRIGGER_PANIC_ALARM;
-    static const QByteArray CMD_KEY_PRESSED_VIRT;
-    static const QByteArray CMD_BAUD_RATE_CHANGE;
-    static const QByteArray CMD_GET_TEMPERATURE_SET_POINT;
-    static const QByteArray CMD_TEMPERATURE_CHANGE;
-    static const QByteArray CMD_SAVE_TEMPERATURE_SETTING;
-    static const QByteArray CMD_CODE_SEND;
+    InterfaceType interfaceType;
 
-    /**
-      * IT-100 Originated Commands
-      */
-    static const QByteArray CMD_COMMAND_ACKNOWLEDGE;
-    static const QByteArray CMD_COMMAND_ERROR;
-    static const QByteArray CMD_SYSTEM_ERROR;
-    static const QByteArray CMD_TIME_DATE_BROADCAST;
-    static const QByteArray CMD_RING_DETECETD;
-    static const QByteArray CMD_INDOOR_TEMPERATURE_BROADCAST;
-    static const QByteArray CMD_OUTDOOR_TEMPERATURE_BROADCAST;
-    static const QByteArray CMD_THERMOSTAT_SET_POINTS;
-    static const QByteArray CMD_BROADCAST_LABELS;
-    static const QByteArray CMD_BAUD_RATE_SET;
-    static const QByteArray CMD_ZONE_ALARM;
-    static const QByteArray CMD_ZONE_ALARM_RESTORE;
-    static const QByteArray CMD_ZONE_TAMPER;
-    static const QByteArray CMD_ZONE_TAMPER_RESTORE;
-    static const QByteArray CMD_ZONE_FAULT;
-    static const QByteArray CMD_ZONE_FAULT_RESTORE;
-    static const QByteArray CMD_ZONE_OPEN;
-    static const QByteArray CMD_ZONE_RESTORED;
-    static const QByteArray CMD_DURESS_ALARM;
-    static const QByteArray CMD_F_KEY_ALARM;
-    static const QByteArray CMD_F_KEY_RESTORAL;
-    static const QByteArray CMD_A_KEY_ALARM;
-    static const QByteArray CMD_A_KEY_RESTORAL;
-    static const QByteArray CMD_P_KEY_ALARM;
-    static const QByteArray CMD_P_KEY_RESTORAL;
-    static const QByteArray CMD_AUXILIARY_INPUT_ALARM;
-    static const QByteArray CMD_AUXILIARY_INPUT_ALARM_RESTORED;
-    static const QByteArray CMD_PARTITION_READY;
-    static const QByteArray CMD_PARTITION_NOT_READY;
-    static const QByteArray CMD_PARTITION_ARMED_DESCRIPTIVE_MODE;
-    static const QByteArray CMD_PARTITION_IN_READY_TO_FORCE_ALARM;
-    static const QByteArray CMD_PARTITION_IN_ALARM;
-    static const QByteArray CMD_PARTITION_DISARMED;
-    static const QByteArray CMD_EXIT_DELAY_IN_PROGRESS;
-    static const QByteArray CMD_ENTRY_DELAY_IN_PROGRESS;
-    static const QByteArray CMD_KEYPAD_LOCKOUT;
-    static const QByteArray CMD_KEYPAD_BLANKING;
-    static const QByteArray CMD_COMMAND_OUTPUT_IN_PROGRESS;
-    static const QByteArray CMD_INVALID_ACCESS_CODE;
-    static const QByteArray CMD_FUNCTION_NOT_AVAILABLE;
-    static const QByteArray CMD_FAIL_TO_ARM;
-    static const QByteArray CMD_PARTITION_BUSY;
-    static const QByteArray CMD_USER_CLOSING;
-    static const QByteArray CMD_SPECIAL_CLOSING;
-    static const QByteArray CMD_PARTIAL_CLOSING;
-    static const QByteArray CMD_USER_OPENING;
-    static const QByteArray CMD_SPECIAL_OPENING;
-    static const QByteArray CMD_PANEL_BATTERY_TROUBLE;
-    static const QByteArray CMD_PANEL_BATTERY_TROUBLE_RESTORE;
-    static const QByteArray CMD_PANEL_AC_TROUBLE;
-    static const QByteArray CMD_PANEL_AC_RESTORE;
-    static const QByteArray CMD_SYSTEM_BELL_TROUBLE;
-    static const QByteArray CMD_SYSTEM_BELL_TROUBLE_RESTORAL;
-    static const QByteArray CMD_TLM_LINE_1_TROUBLE;
-    static const QByteArray CMD_TLM_LINE_1_TROUBLE_RESTORAL;
-    static const QByteArray CMD_TLM_LINE_2_TROUBLE;
-    static const QByteArray CMD_TLM_LINE_2_TROUBLE_RESTORAL;
-    static const QByteArray CMD_FTC_TROUBLE;
-    static const QByteArray CMD_BUFFER_NEAR_FULL;
-    static const QByteArray CMD_GENERAL_DEVICE_LOW_BATTERY;
-    static const QByteArray CMD_GENERAL_DEVICE_LOW_BATTERY_RESTORE;
-    static const QByteArray CMD_WIRELESS_KEY_LOW_BATTERY_TROUBLE;
-    static const QByteArray CMD_WIRELESS_KEY_LOW_BATTERY_TROUBLE_RESTORE;
-    static const QByteArray CMD_HANDHELD_KEYPAD_LOW_BATTERY_TROUBLE;
-    static const QByteArray CMD_HANDHELD_KEYPAD_LOW_BATTERY_TROUBLE_RESTORE;
-    static const QByteArray CMD_GENERAL_SYSTEM_TAMPER;
-    static const QByteArray CMD_GENERAL_SYSTEM_TAMPER_RESTORE;
-    static const QByteArray CMD_HOME_AUTOMATION_TROUBLE;
-    static const QByteArray CMD_HOME_AUTOMATION_TROUBLE_RESTORE;
-    static const QByteArray CMD_TROUBLE_STATUS_LED_ON;
-    static const QByteArray CMD_TROUBLE_STATUS_LED_OFF;
-    static const QByteArray CMD_FIRE_TROUBLE_ALARM;
-    static const QByteArray CMD_FIRE_TROUBLE_ALARM_RESTORE;
-    static const QByteArray CMD_CODE_REQUIRED;
-    static const QByteArray CMD_LCD_UPDATE;
-    static const QByteArray CMD_LCD_CURSOR;
-    static const QByteArray CMD_LED_STATUS;
-    static const QByteArray CMD_BEEP_STATUS;
-    static const QByteArray CMD_TONE_STATUS;
-    static const QByteArray CMD_BUZZER_STATUS;
-    static const QByteArray CMD_DOOR_CHIME_STATUS;
-    static const QByteArray CMD_SOFTWARE_VERSION;
-
+    QDateTime lastTransmittedCommsAt; // When serial comms last sent to IT-100
+    QDateTime lastReceivedCommsAt; // When serial comms last received
 
 private:
 
+    void writePacket();
+
+    // generate DSC style checksum from command+data bytes
+    QByteArray generateChecksum(QByteArray data);
+
+    // build packet from commmand+data bytes
+    QByteArray generatePacket(QByteArray command, QByteArray data);
+
+    int processReceivedLine(QByteArray data);
+
     ComponentStatus status = COMP_STATUS_UNKNOWN;
 
-    QTcpSocket *socket;
+    QTcpSocket *socket = nullptr;
     bool _connected;
     bool _connectionIntent;
     int _connectionAttempts;
@@ -258,38 +170,27 @@ private:
 
     QList<It100Message*> messageQueueOut;
 
-    quint32 panelUserCode;
-    quint32 panelProgrammerCode;
-
-    void writePacket();
+    // QTimers
+    QTimer *pollTimer = nullptr;
+    QTimer *timedisciplineTimer = nullptr;
+    QTimer *communicationsTimeoutTimer = nullptr;
+    QTimer *moduleReconnectTimer = nullptr;
 
     QString receivedData;
-    int processReceivedLine(QByteArray data);
 
-    // generate DSC style checksum from command+data bytes
-    QByteArray generateChecksum(QByteArray data);
-
-    // build packet from commmand+data bytes
-    QByteArray generatePacket(QByteArray command, QByteArray data);
-
-    // QTimers
-    QTimer *pollTimer;
-    QTimer *timedisciplineTimer;
-    QTimer *communicationsTimeoutTimer;
-    QTimer *moduleReconnectTimer;
-
-
+    uint32_t panelUserCode;
+    uint32_t panelProgrammerCode;
 
 private slots:
 
-    void onDataAvailable();
+    void processTcpSocketReadyRead();
     void onPollTimerTimeout();
-    void onConnected();
+    void processTcpSocketConnected();
     void onTimeDisciplineTimerTimeout();
     void onCommunicationsTimeoutTimerTimeout();
-    void on_moduleReconnectTimerTimeout();
-    void onTcpSocketStateChanged(QAbstractSocket::SocketState);
-    void onTcpConnectRetryTimeout();
+    void processModuleReconnectTimerTimeout();
+    void processTcpSocketStateChange(QAbstractSocket::SocketState);
+    void processTcpConnectRetryTimeout();
 
 signals:
 
@@ -322,17 +223,43 @@ signals:
       */
     void communicationsTimeout();
 
-    void zoneOpen(quint8 partition, quint8 zone);
-    void zoneRestored(quint8 partition, quint8 zone);
-    void zoneStatusChanged(quint8 zone, quint8 partition, ZoneStatus status);
-    void partitionStatusChanged(quint8 partition, PartitionStatus status, quint8 zone = 0);
-    void partitionArmedDescriptive(quint8 partition, PartitionArmedMode mode);
+    /** user -1 when unknown */
+    void userEvent(UserEventType type, int partition, int user);
+
+    void zoneOpen(int partition, int zone);
+    void zoneRestored(int partition, int zone);
+    void zoneStatusChanged(int zone, int partition, ZoneStatus status);
+    void partitionStatusChanged(int partition, PartitionStatus status, int zone = 0);
+    void partitionArmedDescriptive(int partition, PartitionArmedMode mode);
     void troubleEvent(TroubleEvent event);
+
+    /** an access code that was entered is invalid */
+    void invalidAccessCode(int partition);
+
+    /** indicates a partition has been armed by a user
+        note: this is sent after exit_delay */
+    void userClosing(int partition, int userCode);
+    
+    /** indicates partition has been armed by one of the following methods:
+        Quick Arm, Auto Arm, Keysiwtch, DLS Software, or Wireless Key */
+    void specialClosing(int partition);
+
+    /** indicates partition has been armed but one or more zones have 
+        been bypassed */
+    void partialClosing(int partition);
+
+    /** indicates partition has been opened by a user */
+    void userOpening(int partition, int userCode);
+
+    /** indicates partition has been disarmed by one of following methods:
+        Keyswitch, DLS Software, Wireless Key */
+    void specialOpening(int partition);
+
 
     void virtualKeypadDisplayUpdate();
 
 };
 
-
+} // namespace it100
 
 #endif // IT100_H
