@@ -1,23 +1,7 @@
 #!/bin/bash
 
-mkdir -p build
-cd build
-qmake "CONFIG += warn_off debug" ../src
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-make
-
-cd ../
-
-ln -sTf build/it100mqtt it100mqtt
-
-# copy example settings if no local settings present
-cp -n settings-example.cfg settings.cfg
-
-#echo
-#echo restarting it100mqtt service..
-#sudo systemctl restart it100mqtt
-
-# fini
-echo
-echo done
-echo
+mkdir -p "$SCRIPT_DIR/build" && \
+    qmake -o "$SCRIPT_DIR/build/Makefile" "CONFIG += warn_off debug" "$SCRIPT_DIR/src/it100mqtt.pro" && \
+    make -C "$SCRIPT_DIR/build"

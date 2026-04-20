@@ -2,13 +2,13 @@
 Description=IT100 MQTT Bridge
 After=ser2net.service emqx.service network.target
 Requires=ser2net.service emqx.service
+StartLimitIntervalSec=20
 
 [Service]
 Type=notify
-User=mcurrie
+User=root
 
-WorkingDirectory=/opt/it100mqtt
-ExecStart=/opt/it100mqtt/it100mqtt settings.cfg
+ExecStart=/usr/local/bin/it100mqtt /usr/local/etc/it100mqtt.conf
 
 TimeoutStartSec=10
 NotifyAccess=all
