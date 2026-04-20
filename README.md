@@ -14,11 +14,24 @@ Interact with DSC alarm system via MQTT topics.
 * Ser2net (or appropriate Serial-IP solution)
 * MQTT Broker
 
+## Install
+
+- Builds and installs `it100mqtt` binary to `/usr/local/bin`
+- Copies example config to `/usr/local/etc/it100mqtt.conf` if not already preset
+- Sets `/usr/local/etc/it100mqtt.conf` -> `root:root` -> `ug+rw,o-rw`
+- Installs systemd unit to `/etc/systemd/system/it100mqtt.service`
+- Enable and starts `it100mqtt` service
+    - it100mqtt is systemd notify-aware
+
+```
+./install.sh
+```
+
 # MQTT Topics
 
 ## Availability
 
-Topic: [topic_prefix]/availability
+Topic: TOPIC_PREFIX/availability
 
 payload: online|offline QOS_1,retained
 
@@ -29,13 +42,13 @@ payload: online|offline QOS_1,retained
 
 ### Partition Armed
 
-Topic: [topic_prefix]/partition/[partition_number]/armed
+Topic: TOPIC_PREFIX/partition/PARTITION_NUMBER/armed
 
 Payload: 0|1 (string)
 
 ### Partition State
 
-Topic: [topic_prefix]/partition/[partition_number]/state
+Topic: TOPIC_PREFIX/partition/PARTITION_NUMBER/state
 
 * exit_delay
 * entry_delay
@@ -47,7 +60,7 @@ Topic: [topic_prefix]/partition/[partition_number]/state
 
 ### Partition Description Condition
 
-Topic: [topic_prefix]/partition/[partition_number]/condition
+Topic: TOPIC_PREFIX/partition/PARTITION_NUMBER/condition
 
 * ready
 * not_ready
@@ -61,7 +74,7 @@ Topic: [topic_prefix]/partition/[partition_number]/condition
 
 ### Partition Events
 
-Topic: [topic_prefix]/partition/[partition_number]/event
+Topic: TOPIC_PREFIX/partition/PARTITION_NUMBER/event
 
 Possible Values:
 
@@ -82,12 +95,12 @@ Possible Values:
 
 Need to prove -- can a zone be faulted and restored|violated?
 
-Topic: [topic_prefix]/zone/[zone_number]/state
+Topic: TOPIC_PREFIX/zone/ZONE_NUMBER/state
 
 * open
 * closed
 
-Topic: [topic_prefix]/zone/[zone_number]/condition
+Topic: TOPIC_PREFIX/zone/ZONE_NUMBER/condition
 
 * alarm
 * violated
@@ -97,7 +110,7 @@ Topic: [topic_prefix]/zone/[zone_number]/condition
 
 ## Zone Events
 
-Topic: [topic_prefix]/zone/[zone_number]/event
+Topic: TOPIC_PREFIX/zone/ZONE_NUMBER/event
 
 Possible Values:
 
@@ -125,7 +138,7 @@ Possible Values:
 
 ## Commands
 
-Topic: [topic_prefix]/command
+Topic: TOPIC_PREFIX/command
 
 Possible Commands:
 
@@ -137,7 +150,7 @@ Possible Commands:
 
 ## LCD Display Contents
 
-[topic_prefix]/keypad_lcd_data
+TOPIC_PREFIX/keypad_lcd_data
 
 ## Keypresses
 
